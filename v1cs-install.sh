@@ -13,7 +13,7 @@
 #    REG_MODE       api (defaut) : cree le cluster via l'API, recupere le token
 #                   auto         : auto-registration par le chart Helm
 #    CLUSTER_NAME   defaut PX_Lab_<date>
-#    GROUP_ID       defaut 00000000-0000-0000-0000-000000000001 (groupe par defaut)
+#    GROUP_ID       vide = demande (defaut 0000...0000 = Self-managed)
 #    POLICY_ID      vide = aucune policy assignee
 #    RUNTIME VULN MALWARE SECRET   true|false (defaut true)
 #    CHART_VERSION  vide = derniere version
@@ -23,7 +23,8 @@ set -euo pipefail
 V1_REGION="${V1_REGION:-eu}"
 REG_MODE="${REG_MODE:-api}"
 CLUSTER_NAME="${CLUSTER_NAME:-PX_Lab_$(date +%Y%m%d_%H%M)}"
-GROUP_ID="${GROUP_ID:-00000000-0000-0000-0000-000000000001}"
+GROUP_ID="${GROUP_ID:-}"   # vide = demande au clavier
+DEFAULT_GROUP_ID="00000000-0000-0000-0000-000000000000"   # groupe Self-managed
 POLICY_ID="${POLICY_ID:-}"
 RUNTIME="${RUNTIME:-true}"
 VULN="${VULN:-true}"
@@ -97,6 +98,12 @@ uninstall() {
 
 install() {
   helm status "$RELEASE" -n "$NS" >/dev/null 2>&1 && die "Release $RELEASE deja installee. Lancer d'abord : $0 uninstall"
+  if [ -z "$GROUP_ID" ]; then
+    read -rp "ID du groupe de clusters [${DEFAULT_GROUP_ID} = Self-managed] : " GROUP_ID
+    GROUP_ID="${GROUP_ID:-$DEFAULT_GROUP_ID}"
+  fi
+  [[ "$GROUP_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || die "GROUP_ID invalide : $GROUP_ID"
+  log "Groupe : $GROUP_ID"
   get_key
 
   if [ "$REG_MODE" = api ]; then
