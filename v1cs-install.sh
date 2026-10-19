@@ -77,8 +77,9 @@ v1api() { # METHOD PATH [JSON_BODY] -> sets HTTP_CODE, BODY_F, HDR_F
 
 # ----------------------------------------------------------------------------
 uninstall() {
-  get_key
   [ -f "$STATE" ] && . "$STATE"
+  # En mode auto, le chart desenregistre lui-meme le cluster : pas besoin de cle
+  [ "${SAVED_MODE:-}" = api ] && get_key
   log "helm uninstall"
   helm uninstall "$RELEASE" -n "$NS" --wait --timeout 10m || true
   kubectl delete ns "$NS" --ignore-not-found --timeout=5m || true
@@ -98,14 +99,18 @@ install() {
   helm status "$RELEASE" -n "$NS" >/dev/null 2>&1 && die "Release $RELEASE deja installee. Lancer d'abord : $0 uninstall"
   get_key
 
-  log "Test de la cle API ($API)"
-  v1api GET "/v3.0/containerSecurity/kubernetesClusters?top=1"
-  case "$HTTP_CODE" in
-    200) log "Cle API OK" ;;
-    401) die "Cle API invalide ou expiree (401)" ;;
-    403) die "Cle API sans droit Container Security (403)" ;;
-    *)   cat "$BODY_F"; echo; die "Reponse inattendue HTTP $HTTP_CODE. Region correcte ?" ;;
-  esac
+  if [ "$REG_MODE" = api ]; then
+    log "Test de la cle API ($API)"
+    v1api GET "/v3.0/containerSecurity/kubernetesClusters?top=1"
+    case "$HTTP_CODE" in
+      200) log "Cle API OK" ;;
+      401) die "Cle API invalide ou expiree (401)" ;;
+      403) die "Cle API sans droit de lecture CS (403). Cle auto-registration ? Utiliser REG_MODE=auto" ;;
+      *)   cat "$BODY_F"; echo; die "Reponse inattendue HTTP $HTTP_CODE. Region correcte ?" ;;
+    esac
+  else
+    log "Mode auto : la cle sera validee par le chart a l'installation"
+  fi
 
   kubectl create ns "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
